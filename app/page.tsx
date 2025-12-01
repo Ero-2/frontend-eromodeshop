@@ -1,8 +1,7 @@
-// src/app/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Producto {
   idProducto: number;
@@ -11,21 +10,35 @@ interface Producto {
   precio: number;
   marca: { nombre: string };
   inventarios: { talla: { nombreTalla: string }; stock: number }[];
+  imagenes?: { idImagen: number; urlImagen: string; esPrincipal: boolean }[];
 }
 
 export default function Home() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const router = useRouter();
 
   useEffect(() => {
     const fetchProductos = async () => {
       try {
-        // ⚠️ Reemplaza el puerto por el de tu API .NET
-        const res = await fetch('https://localhost:7008/api/productos');
-        const data: Producto[] = await res.json();
-        setProductos(data);
+        const res = await fetch('https://localhost:7220/api/productos');
+        
+        if (!res.ok) {
+          throw new Error('Error al cargar productos');
+        }
+        
+        const data = await res.json();
+        
+        console.log('Datos recibidos:', data);
+        
+        const productosArray = Array.isArray(data) ? data : (data.value || data.productos || []);
+        
+        setProductos(productosArray);
       } catch (error) {
         console.error('Error al cargar productos:', error);
+        setError('No se pudieron cargar los productos');
       } finally {
         setLoading(false);
       }
@@ -34,9 +47,35 @@ export default function Home() {
     fetchProductos();
   }, []);
 
+  const agregarAlCarrito = (producto: Producto) => {
+    const tallasDisponibles = producto.inventarios.filter(i => i.stock > 0);
+    
+    if (tallasDisponibles.length === 0) {
+      alert('No hay stock disponible para este producto.');
+      return;
+    }
+
+    const primeraTalla = tallasDisponibles[0].talla.nombreTalla;
+
+    const item = {
+      idProducto: producto.idProducto,
+      nombre: producto.nombre,
+      precio: producto.precio,
+      talla: primeraTalla,
+      cantidad: 1,
+      imagen: producto.imagenes?.[0]?.urlImagen || ''
+    };
+
+    let carritoActual = JSON.parse(localStorage.getItem('carrito') || '[]');
+    carritoActual.push(item);
+    localStorage.setItem('carrito', JSON.stringify(carritoActual));
+    
+    alert(`✅ ${producto.nombre} agregado al carrito.`);
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
-      {/* BANNER GRANDE */}
+      {/* BANNER */}
       <div className="bg-gradient-to-r from-blue-900 to-black text-white rounded-xl p-12 mb-12 text-center shadow-lg">
         <h1 className="text-4xl md:text-5xl font-bold mb-4">¡Nuevos Tenis Ya Disponibles!</h1>
         <p className="text-xl mb-6">Descubre las últimas tendencias en calzado urbano</p>
@@ -45,34 +84,57 @@ export default function Home() {
         </button>
       </div>
 
-      {/* TÍTULO DE PRODUCTOS */}
       <h2 className="text-3xl font-bold text-center mb-8">Nuestros Tenis</h2>
 
-      {/* LISTA DE PRODUCTOS */}
       {loading ? (
         <p className="text-center text-gray-600">Cargando productos...</p>
+      ) : error ? (
+        <p className="text-center text-red-600">{error}</p>
       ) : productos.length === 0 ? (
         <p className="text-center text-gray-600">No hay productos disponibles.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {productos.map((producto) => {
             const tallasDisponibles = producto.inventarios
-              .filter(i => i.stock > 0)
+              ?.filter(i => i.stock > 0)
               .map(i => i.talla.nombreTalla)
-              .join(', ');
+              .join(', ') || 'Sin stock';
 
             return (
-              <div key={producto.idProducto} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 bg-gray-200 flex items-center justify-center">
-                  <span className="text-gray-500">Imagen de {producto.nombre}</span>
+              <div
+                key={producto.idProducto}
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow cursor-pointer"
+                onClick={() => router.push(`/producto/${producto.idProducto}`)}
+              >
+                <div className="h-48 bg-gray-200 flex items-center justify-center overflow-hidden">
+                  {producto.imagenes && producto.imagenes.length > 0 ? (
+                    <img
+                      src={producto.imagenes[0].urlImagen}
+                      alt={producto.nombre}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/placeholder-shoe.png'; 
+                        console.error('Error cargando imagen:', producto.imagenes?.[0]?.urlImagen);
+                      }}
+                    />
+                  ) : (
+                    <span className="text-gray-500">Sin imagen</span>
+                  )}
                 </div>
                 <div className="p-4">
                   <h3 className="font-bold text-lg">{producto.nombre}</h3>
                   <p className="text-gray-600 text-sm">{producto.descripcion}</p>
                   <p className="text-blue-600 font-bold mt-2">${producto.precio.toFixed(2)}</p>
-                  <p className="text-xs text-gray-500 mt-1">Marca: {producto.marca.nombre}</p>
-                  <p className="text-xs text-gray-500">Tallas: {tallasDisponibles || 'Sin stock'}</p>
-                  <button className="mt-3 w-full bg-black text-white py-2 rounded hover:bg-gray-800 transition">
+                  <p className="text-xs text-gray-500 mt-1">Marca: {producto.marca?.nombre || 'Sin marca'}</p>
+                  <p className="text-xs text-gray-500">Tallas: {tallasDisponibles}</p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      agregarAlCarrito(producto);
+                    }}
+                    className="mt-3 w-full bg-black text-white py-2 rounded hover:bg-gray-800 transition"
+                  >
                     Agregar al carrito
                   </button>
                 </div>

@@ -16,7 +16,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('https://localhost:7008/api/usuarios/register', {
+      const res = await fetch('https://localhost:7220/api/usuarios/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre, apellido, email, password }),

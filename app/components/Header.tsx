@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ShoppingCartIcon, UserIcon, ArrowLeftOnRectangleIcon } from '@heroicons/react/24/outline';
+import { ShoppingCartIcon, UserIcon } from '@heroicons/react/24/outline';
 
 export default function Header() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
-  const [isUser, setIsUser] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // ✅ Renombrado para claridad
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
@@ -18,16 +18,23 @@ export default function Header() {
         setUserName(payload.name || 'Usuario');
         setIsLoggedIn(true);
 
-        // 🔹 Verificar si es admin
+        // 🔹 Leer el rol del token
         const roles = payload.role || [];
-        const isAdmin = Array.isArray(roles)
+        const isAdminFlag = Array.isArray(roles)
           ? roles.includes('Admin')
           : roles === 'Admin';
 
-        setIsUser(true);
+        setIsAdmin(isAdminFlag); // ✅ Solo es true si es Admin
       } catch (e) {
-        setUserName('Usuario');
+        console.error('Token inválido:', e);
+        setIsLoggedIn(false);
+        setUserName('');
+        setIsAdmin(false);
       }
+    } else {
+      setIsLoggedIn(false);
+      setUserName('');
+      setIsAdmin(false);
     }
   }, []);
 
@@ -35,6 +42,7 @@ export default function Header() {
     localStorage.removeItem('token');
     setIsLoggedIn(false);
     setUserName('');
+    setIsAdmin(false);
     setShowUserMenu(false);
     window.location.href = '/';
   };
@@ -72,7 +80,7 @@ export default function Header() {
           </Link>
 
           {/* Botón de Admin (solo si es admin) */}
-          {isUser && (
+          {isAdmin && (
             <Link href="/admin" className="font-['EroSub'] text-2xl hover:text-gray-300">
               Admin
             </Link>
