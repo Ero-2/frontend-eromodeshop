@@ -49,8 +49,15 @@ export default function Header() {
 
   // Cerrar menú al hacer clic fuera
   useEffect(() => {
-    const handleClickOutside = () => {
-      if (showUserMenu) setShowUserMenu(false);
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showUserMenu) {
+        // Verifica si el clic fue fuera del menú
+        const target = e.target as Node;
+        const menu = document.querySelector('.user-menu');
+        if (menu && !menu.contains(target)) {
+          setShowUserMenu(false);
+        }
+      }
     };
     window.addEventListener('click', handleClickOutside);
     return () => window.removeEventListener('click', handleClickOutside);
@@ -79,12 +86,19 @@ export default function Header() {
             <span className="font-['EroSub'] text-sm"></span>
           </Link>
 
-          {/* Botón de Admin (solo si es admin) */}
-          {isAdmin && (
-            <Link href="/admin" className="font-['EroSub'] text-2xl hover:text-gray-300">
-              Admin
-            </Link>
-          )}
+          {/* ✅ SOLO PARA ADMINS: enlaces de Ventas y Admin */}
+  {isAdmin && (
+    <>
+      <Link href="/ventas" className="font-['EroSub'] text-2xl hover:text-gray-300">
+        Ventas
+      </Link>
+      <Link href="/admin" className="font-['EroSub'] text-2xl hover:text-gray-300">
+        Admin
+      </Link>
+    </>
+  )}
+
+        
 
           {/* Menú de usuario */}
           {isLoggedIn ? (
@@ -102,9 +116,17 @@ export default function Header() {
 
               {showUserMenu && (
                 <div
-                  className="absolute right-0 mt-2 w-48 bg-white text-black rounded-md shadow-lg z-10"
+                  className="user-menu absolute right-0 mt-2 w-48 bg-white text-black rounded-md shadow-lg z-10"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {/* 👇 Botón de "Mi Cuenta" */}
+                  <Link
+                    href="/mi-cuenta"
+                    className="block px-4 py-2 text-sm hover:bg-gray-100"
+                    onClick={() => setShowUserMenu(false)} // Cierra el menú al hacer clic
+                  >
+                    Mi Cuenta
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
