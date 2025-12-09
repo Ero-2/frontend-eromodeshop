@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ShoppingCartIcon, UserIcon } from '@heroicons/react/24/outline';
+import { ShoppingCartIcon, UserIcon, TruckIcon } from '@heroicons/react/24/outline';
 
 export default function Header() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -86,19 +86,23 @@ export default function Header() {
             <span className="font-['EroSub'] text-sm"></span>
           </Link>
 
-          {/* ✅ SOLO PARA ADMINS: enlaces de Ventas y Admin */}
-  {isAdmin && (
-    <>
-      <Link href="/ventas" className="font-['EroSub'] text-2xl hover:text-gray-300">
-        Ventas
-      </Link>
-      <Link href="/admin" className="font-['EroSub'] text-2xl hover:text-gray-300">
-        Admin
-      </Link>
-    </>
-  )}
+          {/* Tracking - Visible para todos */}
+          <Link href="/tracking" className="flex items-center space-x-1 hover:text-gray-300">
+            <TruckIcon className="h-6 w-6" />
+            <span className="font-['EroSub'] text-2xl">Seguimiento</span>
+          </Link>
 
-        
+          {/* ✅ SOLO PARA ADMINS: enlaces de Ventas y Admin */}
+          {isAdmin && (
+            <>
+              <Link href="/ventas" className="font-['EroSub'] text-2xl hover:text-gray-300">
+                Ventas
+              </Link>
+              <Link href="/admin" className="font-['EroSub'] text-2xl hover:text-gray-300">
+                Admin
+              </Link>
+            </>
+          )}
 
           {/* Menú de usuario */}
           {isLoggedIn ? (
