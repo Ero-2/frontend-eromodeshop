@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Package, Clock, CheckCircle } from 'lucide-react';
+import { Loader2, Package } from 'lucide-react';
 
 interface OrdenResumen {
-  IdOrden: number;
-  Total: number;
-  FechaOrden: string; // ISO string
+  idOrden: number;
+  total: number;
+  fechaOrden: string;
 }
 
 interface DetalleOrden {
@@ -18,8 +18,6 @@ interface DetalleOrden {
   precioUnitario: number;
   subtotal: number;
   status: string;
-  nombreEstado: string;
-  colorEstado: string;
 }
 
 export default function MisPedidosPage() {
@@ -32,7 +30,6 @@ export default function MisPedidosPage() {
 
   const router = useRouter();
 
-  // Cargar lista de órdenes al montar
   useEffect(() => {
     const cargarOrdenes = async () => {
       const token = localStorage.getItem('token');
@@ -48,12 +45,14 @@ export default function MisPedidosPage() {
 
         if (res.ok) {
           const data = await res.json();
+          console.log('Órdenes recibidas:', data); // Para debug
           setOrdenes(data);
         } else {
           const err = await res.json();
           setError(err.error || 'No se pudieron cargar tus pedidos.');
         }
       } catch (err) {
+        console.error('Error al cargar órdenes:', err);
         setError('Error de conexión con el servidor.');
       } finally {
         setLoading(false);
@@ -63,7 +62,6 @@ export default function MisPedidosPage() {
     cargarOrdenes();
   }, [router]);
 
-  // Cargar detalles de una orden específica
   const verDetalles = async (id: number) => {
     if (ordenSeleccionada === id) {
       setOrdenSeleccionada(null);
@@ -83,6 +81,7 @@ export default function MisPedidosPage() {
 
       if (res.ok) {
         const data = await res.json();
+        console.log('Detalles recibidos:', data); // Para debug
         setDetalles(data);
       } else {
         const err = await res.json();
@@ -90,6 +89,7 @@ export default function MisPedidosPage() {
         setDetalles([]);
       }
     } catch (err) {
+      console.error('Error al cargar detalles:', err);
       setError('Error al cargar los detalles del pedido.');
       setDetalles([]);
     } finally {
@@ -129,16 +129,19 @@ export default function MisPedidosPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {ordenes.map((orden) => (
-            <div key={orden.IdOrden} className="border rounded-xl overflow-hidden shadow-sm">
+          {ordenes.map((orden, index) => (
+            <div
+              key={`orden-${orden.idOrden ?? index}`}
+              className="border rounded-xl overflow-hidden shadow-sm"
+            >
               <div
                 className="bg-white p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition"
-                onClick={() => verDetalles(orden.IdOrden)}
+                onClick={() => verDetalles(orden.idOrden)}
               >
                 <div>
-                  <h3 className="text-lg font-semibold">Pedido #{orden.IdOrden}</h3>
+                  <h3 className="text-lg font-semibold">Pedido #{orden.idOrden ?? 'N/A'}</h3>
                   <p className="text-gray-600 text-sm">
-                    {new Date(orden.FechaOrden).toLocaleDateString('es-ES', {
+                    {new Date(orden.fechaOrden).toLocaleDateString('es-ES', {
                       day: '2-digit',
                       month: 'short',
                       year: 'numeric',
@@ -148,15 +151,14 @@ export default function MisPedidosPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-lg">${(orden.Total ?? 0).toFixed(2)}</p>
+                  <p className="font-bold text-lg">${(orden.total ?? 0).toFixed(2)}</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    {ordenSeleccionada === orden.IdOrden ? 'Ocultar detalles' : 'Ver detalles'}
+                    {ordenSeleccionada === orden.idOrden ? 'Ocultar detalles' : 'Ver detalles'}
                   </p>
                 </div>
               </div>
 
-              {/* Panel de detalles */}
-              {ordenSeleccionada === orden.IdOrden && (
+              {ordenSeleccionada === orden.idOrden && (
                 <div className="bg-gray-50 p-5 border-t">
                   {loadingDetalles ? (
                     <div className="flex justify-center py-4">
@@ -165,15 +167,15 @@ export default function MisPedidosPage() {
                   ) : (
                     <div className="space-y-3">
                       {detalles.length > 0 ? (
-                        detalles.map((detalle) => (
+                        detalles.map((detalle, idx) => (
                           <div
-                            key={detalle.idDetalleOrden}
+                            key={`detalle-${detalle.idDetalleOrden ?? idx}`}
                             className="flex items-start justify-between p-3 bg-white rounded-lg"
                           >
                             <div className="flex-1">
-                              <p className="font-medium">{detalle.producto}</p>
+                              <p className="font-medium">{detalle.producto || 'Producto sin nombre'}</p>
                               <p className="text-sm text-gray-600">
-                                Talla: {detalle.talla} • Cantidad: {detalle.cantidad}
+                                Talla: {detalle.talla || 'N/A'} • Cantidad: {detalle.cantidad || 0}
                               </p>
                               <p className="text-sm text-gray-500">
                                 Precio: ${(detalle.precioUnitario ?? 0).toFixed(2)}
@@ -181,14 +183,12 @@ export default function MisPedidosPage() {
                             </div>
                             <div className="text-right ml-4">
                               <p className="font-semibold">${(detalle.subtotal ?? 0).toFixed(2)}</p>
-                              <span
-                                className="inline-block px-2 py-1 text-xs rounded-full mt-1"
-                                style={{
-                                  backgroundColor: (detalle.colorEstado || '#9CA3AF') + '30',
-                                  color: detalle.colorEstado || '#4B5563'
-                                }}
-                              >
-                                {detalle.nombreEstado || detalle.status}
+                              <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${
+                                detalle.status === 'completado' ? 'bg-green-100 text-green-700' :
+                                detalle.status === 'procesado' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-200 text-gray-700'
+                              }`}>
+                                {detalle.status || 'pendiente'}
                               </span>
                             </div>
                           </div>

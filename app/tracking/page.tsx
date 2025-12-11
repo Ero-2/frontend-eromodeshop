@@ -23,15 +23,6 @@ interface DetalleOrden {
   progreso: number;
 }
 
-const PIPELINE: Record<string, { nombre: string; color: string; icono: string }> = {
-  pendiente: { nombre: 'Pendiente', color: 'bg-yellow-500', icono: 'far fa-clock' },
-  preparando: { nombre: 'En preparación', color: 'bg-blue-500', icono: 'fas fa-box-open' },
-  revisado: { nombre: 'Revisado', color: 'bg-purple-500', icono: 'fas fa-check-double' },
-  liberado: { nombre: 'Liberado', color: 'bg-green-500', icono: 'fas fa-check-circle' },
-  entregado: { nombre: 'Entregado', color: 'bg-teal-600', icono: 'fas fa-truck' },
-  cancelado: { nombre: 'Cancelado', color: 'bg-red-500', icono: 'fas fa-times-circle' }
-};
-
 export default function MisPedidosPage() {
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [ordenSeleccionada, setOrdenSeleccionada] = useState<number | null>(null);
@@ -254,7 +245,44 @@ export default function MisPedidosPage() {
                           <div
                             className={`w-14 h-14 rounded-full ${detalle.colorEstado} flex items-center justify-center shadow-sm`}
                           >
-                            <i className={`${detalle.iconoEstado} text-2xl text-white`}></i>
+                            {/* Usar un ícono simple si no tienes Font Awesome */}
+                            {detalle.iconoEstado === 'Clock' && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            )}
+                            {detalle.iconoEstado === 'Package' && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 6l-8 4m8-4v10l-8 4m0-10L4 13m0 0v10l8 4" />
+                              </svg>
+                            )}
+                            {detalle.iconoEstado === 'Eye' && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            )}
+                            {detalle.iconoEstado === 'Truck' && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17l6-6m0 6l-6-6m6 6H8v-6h6v6z" />
+                              </svg>
+                            )}
+                            {detalle.iconoEstado === 'CheckCircle' && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 6v-6a3 3 0 00-5.356-1.857M18 17M18 17V9m0 8h-2.556A4.444 4.444 0 0112 15.556V11" />
+                              </svg>
+                            )}
+                            {detalle.iconoEstado === 'CreditCard' && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18v6H3v-6z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 10v6M18 10v6" />
+                              </svg>
+                            )}
+                            {detalle.iconoEstado === 'XCircle' && (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-7a4 4 0 11-5.656 5.656L10 14M7 7a4 4 0 015.656 5.656L16 9" />
+                              </svg>
+                            )}
                           </div>
                         </div>
 
@@ -283,7 +311,7 @@ export default function MisPedidosPage() {
                           {/* Badge de estado */}
                           <div className="flex items-center gap-3 mb-3">
                             <span
-                              className={`px-4 py-2 rounded-lg text-sm font-semibold ${detalle.colorEstado} text-white`}
+                              className={`px-4 py-2 rounded-lg text-sm font-semibold text-white ${detalle.colorEstado}`}
                             >
                               {detalle.nombreEstado}
                             </span>
