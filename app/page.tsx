@@ -184,7 +184,7 @@ export default function Home() {
               Tu navegador no soporta el elemento de video.
             </video>
           ) : (
-            <div className="w-full h-full bg-gradient-to-r from-blue-900 to-black"></div>
+            <div className="w-full h-full bg-gradient-to- from-blue-900 to-black"></div>
           )}
           <div className="absolute inset-0 bg-black bg-opacity-50"></div>
         </div>

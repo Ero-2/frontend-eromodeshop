@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -94,6 +95,9 @@ export default function Header() {
             <>
               <Link href="/ventas" className="font-['EroSub'] text-2xl hover:text-gray-300">
                 Ventas
+              </Link>
+              <Link href="/admin/dashboard" className="font-['EroSub'] text-2xl hover:text-gray-300">
+                Dashboard
               </Link>
               <Link href="/admin" className="font-['EroSub'] text-2xl hover:text-gray-300">
                 Admin
