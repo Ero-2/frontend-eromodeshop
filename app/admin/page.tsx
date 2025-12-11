@@ -83,6 +83,10 @@ export default function AdminPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
+  // 👇 Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10; // Productos por página
+
   // Cargar token
   useEffect(() => {
     const t = localStorage.getItem('token');
@@ -93,6 +97,7 @@ export default function AdminPage() {
   // Cargar datos principales
   useEffect(() => {
     if (!token) return;
+    setCurrentPage(1); // 👈 Resetear página al recargar
     cargarDatos();
     cargarTallas();
   }, [token]);
@@ -436,6 +441,12 @@ export default function AdminPage() {
     cargarImagenes(idProducto);
   };
 
+  // 👇 Lógica de paginación
+  const totalItems = productos.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const productosPaginados = productos.slice(startIndex, startIndex + pageSize);
+
   return (
     <div className="max-w-6xl mx-auto p-6 mt-8">
       <h1 className="text-3xl font-bold mb-8">Panel de Administración</h1>
@@ -558,7 +569,7 @@ export default function AdminPage() {
           {/* Lista de productos */}
           <h2 className="text-xl font-semibold mb-4">Productos en la tienda ({productos.length})</h2>
           <div className="space-y-3">
-            {productos.map((p) => (
+            {productosPaginados.map((p) => (
               <div key={p.idProducto} className="bg-white shadow rounded-lg p-4 flex justify-between items-center">
                 <div className="flex-1">
                   <div className="font-bold text-lg">{p.nombre}</div>
@@ -605,6 +616,39 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+
+          {/* ====== PAGINACIÓN ====== */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex justify-center items-center gap-4">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className={`px-4 py-2 rounded-lg ${
+                  currentPage === 1
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-white text-black border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Anterior
+              </button>
+
+              <span className="text-sm text-gray-600">
+                Página {currentPage} de {totalPages}
+              </span>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className={`px-4 py-2 rounded-lg ${
+                  currentPage === totalPages
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-white text-black border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
         </>
       )}
 

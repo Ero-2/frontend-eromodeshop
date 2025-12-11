@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { CreditCard, Store, Landmark, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 interface CarritoItem {
   idProducto: number;
   nombre: string;
   precio: number;
-  talla: string;
   cantidad: number;
+  talla: string;
   imagen: string;
 }
 
@@ -20,27 +21,43 @@ interface PerfilUsuario {
   fechaCreacion: Date;
 }
 
-export default function CheckoutPage() {
+export default function CheckoutUnificadoPage() {
+  // Estados del perfil de usuario
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [email, setEmail] = useState('');
   const [direccion, setDireccion] = useState('');
-  const [metodoPago, setMetodoPago] = useState('tarjeta');
+
+  // Estados del pago
+  const [metodoPago, setMetodoPago] = useState<'tarjeta' | 'oxxo' | 'transferencia'>('tarjeta');
+  const [datos, setDatos] = useState({
+    numeroTarjeta: '',
+    fechaExpiracion: '',
+    cvv: '',
+    referenciaOxxo: '',
+    cuentaTransferencia: '',
+  });
+
+  // Estados del carrito
   const [carrito, setCarrito] = useState<CarritoItem[]>([]);
   const [subtotal, setSubtotal] = useState(0);
+  const [totalPagar, setTotalPagar] = useState(0);
+
+  const COSTO_ENVIO = 15.00;
+
+  // Estados generales
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [perfilCargado, setPerfilCargado] = useState(false);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
-  
-  const router = useRouter();
-  const COSTO_ENVIO = 15.00; 
-  const totalPagar = subtotal + COSTO_ENVIO;
 
-  // Cargar perfil del usuario cuando inicie sesión
+  const router = useRouter();
+
+  // Cargar perfil
   useEffect(() => {
-    const cargarPerfilUsuario = async () => {
+    const cargarPerfil = async () => {
       const token = localStorage.getItem('token');
-      
       if (!token) {
         setCargandoPerfil(false);
         return;
@@ -48,134 +65,120 @@ export default function CheckoutPage() {
 
       try {
         const res = await fetch('https://localhost:7220/api/Usuarios/perfil', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (res.ok) {
-          const perfilData: PerfilUsuario = await res.json();
-          
-          // Combinar nombre y apellido
-          const nombreCompletoUsuario = perfilData.apellido 
-            ? `${perfilData.nombre} ${perfilData.apellido}`
-            : perfilData.nombre;
-          
-          setNombreCompleto(nombreCompletoUsuario);
-          setEmail(perfilData.email);
+          const data: PerfilUsuario = await res.json();
+          setNombreCompleto(data.apellido ? `${data.nombre} ${data.apellido}` : data.nombre);
+          setEmail(data.email);
           setPerfilCargado(true);
-        } else if (res.status === 401) {
-          // Token inválido o expirado
-          localStorage.removeItem('token');
-          setIsLoggedIn(false);
         }
       } catch (err) {
-        console.error('Error cargando perfil:', err);
+        console.error('Error al cargar perfil:', err);
       } finally {
         setCargandoPerfil(false);
       }
     };
 
-    if (isLoggedIn) {
-      cargarPerfilUsuario();
-    }
-  }, [isLoggedIn]);
+    const token = localStorage.getItem('token');
+    setIsLoggedIn(!!token);
+    if (token) cargarPerfil();
+  }, []);
 
+  // Cargar carrito
   useEffect(() => {
-    const verificarSesion = () => {
-      const token = localStorage.getItem('token');
-      const loggedIn = !!token;
-      setIsLoggedIn(loggedIn);
-      
-      // Si no está logueado, resetear datos del perfil
-      if (!loggedIn) {
-        setNombreCompleto('');
-        setEmail('');
-        setPerfilCargado(false);
-      }
-    };
-
     const cargarCarrito = () => {
       const stored = localStorage.getItem('carrito');
       if (stored) {
         try {
           const parsed: CarritoItem[] = JSON.parse(stored);
           setCarrito(parsed);
-          const calculatedSubtotal = parsed.reduce(
-            (sum: number, item: CarritoItem) => sum + item.precio * item.cantidad, 
-            0
-          );
-          setSubtotal(calculatedSubtotal);
-
-          if (parsed.length === 0) {
-            alert('Tu carrito está vacío. Redirigiendo a la tienda.');
-            router.push('/');
-          }
-        } catch (error) {
+          const sub = parsed.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
+          setSubtotal(sub);
+          setTotalPagar(sub + COSTO_ENVIO);
+        } catch {
           router.push('/');
         }
       } else {
         router.push('/');
       }
     };
-
-    verificarSesion();
     cargarCarrito();
-    setIsLoading(false);
-
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'token') {
-        verificarSesion();
-      }
-      if (e.key === 'carrito') {
-        cargarCarrito();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
   }, [router]);
 
-  const getImageUrl = (url: string) => {
-    return url && !url.startsWith('http') ? `https://localhost:7220${url}` : url;
+  // Formateo de tarjeta
+  const formatCardNumber = (value: string) => {
+    return value.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim();
   };
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    e.currentTarget.onerror = null;
-    e.currentTarget.src = 'https://via.placeholder.com/40x40?text=';
+  const handleNumeroTarjetaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDatos({ ...datos, numeroTarjeta: formatCardNumber(e.target.value) });
   };
 
+  const handleFechaExpiracionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let v = e.target.value.replace(/\D/g, '');
+    if (v.length >= 3) v = v.slice(0, 2) + '/' + v.slice(2, 4);
+    else if (v.length >= 2) v = v.slice(0, 2) + '/';
+    setDatos({ ...datos, fechaExpiracion: v });
+  };
+
+  // Validaciones y envío
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setError(null);
+    setLoading(true);
+
     const token = localStorage.getItem('token');
-    
     if (!token) {
-      alert('Debes iniciar sesión para confirmar la compra.');
-      router.push('/login');
+      setError('Debes iniciar sesión.');
+      setLoading(false);
       return;
     }
 
+    // Validar perfil
     if (!nombreCompleto.trim() || !email.trim() || !direccion.trim()) {
-      alert('Por favor completa todos los campos del formulario.');
+      setError('Completa todos los campos de envío.');
+      setLoading(false);
       return;
     }
 
-    if (carrito.length === 0) {
-      alert('Tu carrito está vacío.');
+    // Validar email
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Email inválido.');
+      setLoading(false);
       return;
     }
 
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      alert('Por favor ingresa un email válido.');
+    // Validar método de pago
+    if (metodoPago === 'tarjeta') {
+      if (!/^\d{16}$/.test(datos.numeroTarjeta.replace(/\s/g, ''))) {
+        setError('Número de tarjeta inválido (16 dígitos).');
+        setLoading(false);
+        return;
+      }
+      if (!/^\d{2}\/\d{2}$/.test(datos.fechaExpiracion)) {
+        setError('Fecha de expiración inválida (MM/AA).');
+        setLoading(false);
+        return;
+      }
+      if (!/^\d{3,4}$/.test(datos.cvv)) {
+        setError('CVV inválido.');
+        setLoading(false);
+        return;
+      }
+    } else if (metodoPago === 'oxxo' && !datos.referenciaOxxo.trim()) {
+      setError('Ingresa la referencia de OXXO.');
+      setLoading(false);
+      return;
+    } else if (metodoPago === 'transferencia' && !datos.cuentaTransferencia.trim()) {
+      setError('Ingresa el número de cuenta o CLABE.');
+      setLoading(false);
       return;
     }
 
-    // ⭐ Preparar datos del checkout CON los productos del carrito
-    const checkoutData = {
+    // ✅ Payload unificado
+    const payload = {
       nombre: nombreCompleto.trim(),
       email: email.trim(),
       direccionEnvio: direccion.trim(),
@@ -185,251 +188,281 @@ export default function CheckoutPage() {
         nombre: item.nombre,
         talla: item.talla,
         cantidad: item.cantidad
-      }))
+      })),
+      // Campos de pago (solo para validación, no se guardan)
+      ...(metodoPago === 'tarjeta' && {
+        numeroTarjeta: datos.numeroTarjeta.replace(/\s/g, ''),
+        fechaExpiracion: datos.fechaExpiracion,
+        cvv: datos.cvv
+      }),
+      ...(metodoPago === 'oxxo' && { referenciaOxxo: datos.referenciaOxxo }),
+      ...(metodoPago === 'transferencia' && { cuentaTransferencia: datos.cuentaTransferencia })
     };
 
     try {
       const res = await fetch('https://localhost:7220/api/Orden/checkout', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(checkoutData) 
+        body: JSON.stringify(payload)
       });
 
-      const responseText = await res.text();
-
       if (res.ok) {
-        let ordenResponse = null;
-        if (responseText) {
-          try {
-            ordenResponse = JSON.parse(responseText);
-          } catch(e) {
-            console.error('Error al parsear respuesta');
-          }
-        }
-
-        // Limpiar carrito del localStorage
+        setSuccess(true);
         localStorage.removeItem('carrito');
-        setCarrito([]);
-        setSubtotal(0);
-
-        alert(`✅ ¡Gracias ${nombreCompleto.split(' ')[0]}! Tu compra N° ${ordenResponse?.idOrden || 'N/A'} ha sido confirmada. Total: $${totalPagar.toFixed(2)}`);
-        router.push('/');
-        
+        setTimeout(() => router.push('/mis-pedidos'), 2500);
       } else {
-        let errorMessage = 'No se pudo procesar tu compra.';
-        
-        if (res.status === 401) {
-          errorMessage = 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.';
-          localStorage.removeItem('token');
-          setTimeout(() => router.push('/login'), 2000);
-        } else if (responseText) {
-          try {
-            const errorBody = JSON.parse(responseText);
-            errorMessage = errorBody.error || errorBody.title || errorBody.message || errorMessage;
-          } catch (e) {
-            errorMessage = responseText;
-          }
-        }
-
-        alert(`❌ ${errorMessage}`);
+        const err = await res.json();
+        setError(err.error || 'Error al procesar la compra.');
       }
-    } catch (err) {
-      alert('❌ Error de conexión: No se pudo conectar con el servidor.');
+    } catch (err: any) {
+      setError('Error de conexión con el servidor.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (isLoading || carrito.length === 0) {
+  const getImageUrl = (url: string) => {
+    return url && !url.startsWith('http') ? `https://localhost:7220${url}` : url;
+  };
+
+  if (carrito.length === 0) {
     return (
-      <div className="container mx-auto py-8 px-4 text-center">
-        <p className="text-xl">Cargando...</p>
+      <div className="container mx-auto py-12 text-center">
+        <h1 className="text-2xl font-bold mb-4">Tu carrito está vacío</h1>
+        <button onClick={() => router.push('/')} className="bg-black text-white px-6 py-3 rounded-lg hover:bg-gray-800">
+          Ir a la tienda
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-8">Finalizar Compra</h1>
+    <div className="container mx-auto py-8 px-4 max-w-6xl">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Confirmar Compra</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        
-        <div className="lg:col-span-2">
-          <h2 className="text-2xl font-semibold mb-6">Información de Envío y Pago</h2>
-          
-          <div className={`p-4 mb-6 rounded-lg border-2 ${
-            isLoggedIn ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'
-          }`}>
-            <p className={`font-semibold flex items-center gap-2 ${
-              isLoggedIn ? 'text-green-700' : 'text-red-700'
-            }`}>
-              {isLoggedIn ? (
-                <>
-                  <span className="text-2xl">✅</span>
-                  <span>Sesión Iniciada. Listo para confirmar tu compra.</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-2xl">❌</span>
-                  <span>Debes iniciar sesión antes de confirmar la compra.</span>
-                </>
-              )}
-            </p>
-            {!isLoggedIn && (
-              <button
-                onClick={() => router.push('/login')}
-                className="mt-3 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
-              >
-                Ir a Iniciar Sesión
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-6">
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="font-semibold text-gray-700">
-                  Nombre Completo <span className="text-red-500">*</span>
-                </label>
-                {perfilCargado && cargandoPerfil === false && (
-                  <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                    ✓ Precargado desde tu perfil
-                  </span>
-                )}
-              </div>
-              <input
-                type="text"
-                required
-                value={nombreCompleto}
-                onChange={(e) => setNombreCompleto(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Juan Pérez"
-                disabled={!isLoggedIn || cargandoPerfil}
-              />
-              {cargandoPerfil && (
-                <p className="text-xs text-gray-500 mt-1">Cargando datos del perfil...</p>
-              )}
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="font-semibold text-gray-700">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                {perfilCargado && cargandoPerfil === false && (
-                  <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                    ✓ Precargado desde tu perfil
-                  </span>
-                )}
-              </div>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="correo@ejemplo.com"
-                disabled={!isLoggedIn || cargandoPerfil}
-              />
-              {cargandoPerfil && (
-                <p className="text-xs text-gray-500 mt-1">Cargando datos del perfil...</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">
-                Dirección de Envío <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                required
-                value={direccion}
-                onChange={(e) => setDireccion(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                rows={3}
-                placeholder="Calle, número, colonia, ciudad, estado, CP"
-                disabled={!isLoggedIn}
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold text-gray-700">
-                Método de Pago <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={metodoPago}
-                onChange={(e) => setMetodoPago(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                disabled={!isLoggedIn}
-              >
-                <option value="tarjeta">💳 Tarjeta de Crédito</option>
-                <option value="oxxo">🏪 OXXO</option>
-                <option value="transferencia">🏦 Transferencia Bancaria</option>
-              </select>
-            </div>
-
-            <button
-              onClick={handleSubmit}
-              className={`w-full py-3 rounded-lg font-semibold text-lg transition duration-200 ${
-                isLoggedIn && !cargandoPerfil
-                  ? 'bg-black text-white hover:bg-gray-700 cursor-pointer'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-              disabled={!isLoggedIn || cargandoPerfil}
-            >
-              {cargandoPerfil ? 'Cargando datos...' : isLoggedIn ? 'Confirmar Compra' : 'Debes Iniciar Sesión'}
-            </button>
-            
-            {perfilCargado && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  💡 <strong>Nota:</strong> Los datos de nombre y email se han precargado desde tu perfil. 
-                  Puedes editarlos si son incorrectos o si quieres usar información diferente para esta compra.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div className="lg:col-span-1 bg-gray-50 p-6 rounded-lg shadow-md h-fit">
-          <h2 className="text-2xl font-semibold mb-4 border-b pb-2">Tu Orden</h2>
-          
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Resumen del pedido (del ConfirmarPagoPage) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold mb-4">Resumen de tu compra</h2>
           <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
             {carrito.map((item, index) => (
-              <div key={index} className="flex gap-3 items-center border-b pb-3 last:border-b-0">
-                <img
-                  src={getImageUrl(item.imagen)}
-                  alt={item.nombre}
-                  className="w-12 h-12 object-cover rounded"
-                  onError={handleImageError}
-                />
+              <div key={index} className="flex items-start gap-4">
+                <img src={getImageUrl(item.imagen)} alt={item.nombre} className="w-16 h-16 object-cover rounded" />
                 <div className="flex-1">
-                  <p className="font-medium text-sm">{item.nombre}</p>
-                  <p className="text-xs text-gray-500">Talla: {item.talla} | Cantidad: {item.cantidad}</p>
+                  <h3 className="font-medium text-gray-900">{item.nombre}</h3>
+                  <p className="text-sm text-gray-600">Talla: {item.talla} | Cantidad: {item.cantidad}</p>
+                  <p className="text-lg font-semibold text-gray-900">${(item.precio * item.cantidad).toFixed(2)}</p>
                 </div>
-                <p className="font-semibold text-sm">${(item.precio * item.cantidad).toFixed(2)}</p>
               </div>
             ))}
           </div>
-
-          <div className="mt-6 space-y-2 border-t pt-4">
+          <div className="border-t pt-4 mt-4">
             <div className="flex justify-between text-gray-700">
               <span>Subtotal:</span>
               <span>${subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-gray-700">
-              <span>Costo de Envío:</span>
+              <span>Envío:</span>
               <span>${COSTO_ENVIO.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-xl font-bold border-t mt-3 pt-3 text-black">
-              <span>Total a Pagar:</span>
+            <div className="flex justify-between text-xl font-bold mt-2 pt-2 border-t">
+              <span>Total:</span>
               <span>${totalPagar.toFixed(2)}</span>
             </div>
           </div>
-          
-          <p className="text-xs text-gray-500 mt-4 text-center">Impuestos incluidos si aplica.</p>
+        </div>
+
+        {/* Formulario unificado */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold mb-6">Información y Pago</h2>
+
+          {/* Perfil */}
+          {!isLoggedIn ? (
+            <div className="mb-6 p-4 bg-red-50 border border-red-300 rounded-lg">
+              <p className="text-red-700">⚠️ Debes iniciar sesión para confirmar la compra.</p>
+              <button
+                onClick={() => router.push('/login')}
+                className="mt-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+              >
+                Iniciar Sesión
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo *</label>
+                <input
+                  value={nombreCompleto}
+                  onChange={(e) => setNombreCompleto(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                  disabled={cargandoPerfil}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                  disabled={cargandoPerfil}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dirección de Envío *</label>
+                <textarea
+                  value={direccion}
+                  onChange={(e) => setDireccion(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Método de pago (del ConfirmarPagoPage) */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Método de Pago</label>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setMetodoPago('tarjeta')}
+                className={`p-3 border rounded-lg flex flex-col items-center ${
+                  metodoPago === 'tarjeta' ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+              >
+                <CreditCard size={20} className="mb-1" />
+                <span className="text-xs">Tarjeta</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetodoPago('oxxo')}
+                className={`p-3 border rounded-lg flex flex-col items-center ${
+                  metodoPago === 'oxxo' ? 'border-green-500 bg-green-50' : 'border-gray-300'
+                }`}
+              >
+                <Store size={20} className="mb-1" />
+                <span className="text-xs">OXXO</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetodoPago('transferencia')}
+                className={`p-3 border rounded-lg flex flex-col items-center ${
+                  metodoPago === 'transferencia' ? 'border-purple-500 bg-purple-50' : 'border-gray-300'
+                }`}
+              >
+                <Landmark size={20} className="mb-1" />
+                <span className="text-xs">Transferencia</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Campos de pago */}
+          {metodoPago === 'tarjeta' && (
+            <div className="space-y-3 mb-6">
+              <input
+                type="text"
+                placeholder="Número de tarjeta"
+                value={datos.numeroTarjeta}
+                onChange={handleNumeroTarjetaChange}
+                maxLength={19}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="MM/AA"
+                  value={datos.fechaExpiracion}
+                  onChange={handleFechaExpiracionChange}
+                  maxLength={5}
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                />
+                <input
+                  type="text"
+                  placeholder="CVV"
+                  value={datos.cvv}
+                  onChange={(e) => setDatos({ ...datos, cvv: e.target.value.replace(/\D/g, '') })}
+                  maxLength={4}
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <p className="text-xs text-gray-500">Tus datos se procesan de forma segura.</p>
+            </div>
+          )}
+
+          {metodoPago === 'oxxo' && (
+            <div className="mb-6">
+              <input
+                type="text"
+                placeholder="Referencia OXXO (10-13 dígitos)"
+                value={datos.referenciaOxxo}
+                onChange={(e) => setDatos({ ...datos, referenciaOxxo: e.target.value.replace(/\D/g, '') })}
+                maxLength={13}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+            </div>
+          )}
+
+          {metodoPago === 'transferencia' && (
+            <div className="mb-6">
+              <input
+                type="text"
+                placeholder="Número de cuenta o CLABE"
+                value={datos.cuentaTransferencia}
+                onChange={(e) => setDatos({ ...datos, cuentaTransferencia: e.target.value.replace(/\D/g, '') })}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <div className="mt-3 p-3 bg-purple-50 rounded border border-purple-200 text-sm">
+                <p className="font-medium text-purple-800">Datos para transferencia:</p>
+                <p>Banco: <strong>BBVA</strong></p>
+                <p>CLABE: <code className="font-mono">012180015001234567</code></p>
+                <p>Titular: <strong>Ero Mode Shop</strong></p>
+              </div>
+            </div>
+          )}
+
+          {/* Botón */}
+          <button
+            onClick={handleSubmit}
+            disabled={!isLoggedIn || loading}
+            className={`w-full py-3 rounded-lg font-semibold text-white ${
+              !isLoggedIn ? 'bg-gray-400 cursor-not-allowed' : loading ? 'bg-gray-600' : 'bg-black hover:bg-gray-800'
+            }`}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="animate-spin" size={18} />
+                Procesando...
+              </span>
+            ) : (
+              'Confirmar Compra'
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mensajes de error y éxito */}
+      {error && (
+        <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <XCircle className="text-red-500" size={20} />
+          <span className="text-red-700">{error}</span>
+        </div>
+      )}
+
+      {success && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="text-green-600" size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Compra Confirmada!</h2>
+            <p className="text-gray-600">Gracias por tu compra. Serás redirigido a tus pedidos...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,7 +31,10 @@ export default function Home() {
   const [marcaSeleccionada, setMarcaSeleccionada] = useState<number | null>(null);
   const [loadingMarcas, setLoadingMarcas] = useState(true);
   const [busqueda, setBusqueda] = useState('');
-  
+  // 👇 Estado para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8; // Número de productos por página
+
   const router = useRouter();
 
   useEffect(() => {
@@ -80,6 +83,19 @@ export default function Home() {
     return cumpleMarca && cumpleBusqueda;
   });
 
+  // 👇 Calcular productos para la página actual
+  const totalItems = productosFiltrados.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+
+  // Función para obtener productos paginados
+  const getPaginatedProducts = () => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return productosFiltrados.slice(startIndex, endIndex);
+  };
+
+  const productosPaginados = getPaginatedProducts();
+
   const agregarAlCarrito = (producto: Producto) => {
     const tallasDisponibles = producto.inventarios.filter(i => i.stock > 0);
     
@@ -115,6 +131,7 @@ export default function Home() {
 
   const limpiarFiltro = () => {
     setMarcaSeleccionada(null);
+    setCurrentPage(1); // 👈 Resetear a la primera página al limpiar filtros
   };
 
   const handleBuscar = (e: React.FormEvent) => {
@@ -125,6 +142,25 @@ export default function Home() {
     }
   };
 
+  // 👇 Funciones de paginación
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       {/* BANNER CON VIDEO */}
@@ -132,21 +168,21 @@ export default function Home() {
         <div className="absolute inset-0 z-0">
           {!videoError ? (
             <video
-  autoPlay
-  loop
-  muted
-  playsInline
-  className="w-full h-full object-cover"
-  onError={(e) => {
-    console.error('Error loading video:', e);
-    setVideoError(true);
-  }}
-  onLoadStart={() => console.log('Video loading...')}
-  onCanPlay={() => console.log('Video can play')}
->
-  <source src="/videos/nike.mp4" type="video/mp4" />
-  Tu navegador no soporta el elemento de video.
-</video>
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error('Error loading video:', e);
+                setVideoError(true);
+              }}
+              onLoadStart={() => console.log('Video loading...')}
+              onCanPlay={() => console.log('Video can play')}
+            >
+              <source src="/videos/nike.mp4" type="video/mp4" />
+              Tu navegador no soporta el elemento de video.
+            </video>
           ) : (
             <div className="w-full h-full bg-gradient-to-r from-blue-900 to-black"></div>
           )}
@@ -217,6 +253,7 @@ export default function Home() {
                     onClick={() => {
                       setMarcaSeleccionada(null);
                       setBusqueda('');
+                      setCurrentPage(1); // 👈 Resetear página
                     }}
                     className="text-blue-600 hover:underline"
                   >
@@ -256,7 +293,10 @@ export default function Home() {
                 return (
                   <button
                     key={marca.idMarca}
-                    onClick={() => setMarcaSeleccionada(marca.idMarca)}
+                    onClick={() => {
+                      setMarcaSeleccionada(marca.idMarca);
+                      setCurrentPage(1); // 👈 Resetear página al cambiar marca
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-sm transition ${
                       marcaSeleccionada === marca.idMarca
                         ? 'bg-blue-600 text-white'
@@ -291,6 +331,7 @@ export default function Home() {
               onClick={() => {
                 setMarcaSeleccionada(null);
                 setBusqueda('');
+                setCurrentPage(1); // 👈 Resetear página
               }}
               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
             >
@@ -310,9 +351,10 @@ export default function Home() {
               </p>
             </div>
           )}
-          
+
+          {/* Grid de productos */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {productosFiltrados.map((producto) => {
+            {productosPaginados.map((producto) => {
               const tallasDisponibles = producto.inventarios
                 ?.filter(i => i.stock > 0)
                 .map(i => i.talla.nombreTalla)
@@ -372,6 +414,39 @@ export default function Home() {
               );
             })}
           </div>
+
+          {/* 👇 COMPONENTE DE PAGINACIÓN */}
+          {totalPages > 1 && (
+            <div className="mt-8 flex justify-center items-center gap-2">
+              <button
+                onClick={goToPrevPage}
+                disabled={currentPage === 1}
+                className={`px-4 py-2 rounded-lg ${
+                  currentPage === 1
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-white text-black border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Anterior
+              </button>
+
+              <span className="text-sm text-gray-600">
+                Página {currentPage} de {totalPages}
+              </span>
+
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage === totalPages}
+                className={`px-4 py-2 rounded-lg ${
+                  currentPage === totalPages
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-white text-black border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

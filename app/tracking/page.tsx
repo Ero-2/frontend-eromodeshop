@@ -38,6 +38,11 @@ export default function MisPedidosPage() {
   const [detalles, setDetalles] = useState<DetalleOrden[]>([]);
   const [cargando, setCargando] = useState(true);
   const [cargandoDetalles, setCargandoDetalles] = useState(false);
+
+  // 👇 Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5; // Órdenes por página
+
   const router = useRouter();
 
   useEffect(() => {
@@ -106,6 +111,12 @@ export default function MisPedidosPage() {
     }
   };
 
+  // 👇 Lógica de paginación
+  const totalItems = ordenes.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const ordenesPaginadas = ordenes.slice(startIndex, startIndex + pageSize);
+
   if (cargando) {
     return (
       <div className="container mx-auto py-8 px-4 text-center">
@@ -138,7 +149,7 @@ export default function MisPedidosPage() {
           {/* Lista de Órdenes */}
           <div className="lg:col-span-1 space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Tus Órdenes</h2>
-            {ordenes.map((orden) => (
+            {ordenesPaginadas.map((orden) => (
               <button
                 key={orden.idOrden}
                 onClick={() => cargarDetalles(orden.idOrden)}
@@ -172,6 +183,39 @@ export default function MisPedidosPage() {
                 </div>
               </button>
             ))}
+
+            {/* 👇 Componente de Paginación */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-6">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className={`px-3 py-2 rounded-lg text-sm ${
+                    currentPage === 1
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  Anterior
+                </button>
+
+                <span className="text-sm text-gray-600">
+                  {currentPage} de {totalPages}
+                </span>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className={`px-3 py-2 rounded-lg text-sm ${
+                    currentPage === totalPages
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Detalles de la Orden Seleccionada */}

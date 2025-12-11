@@ -7,7 +7,7 @@ import { ShoppingCartIcon, UserIcon, TruckIcon } from '@heroicons/react/24/outli
 export default function Header() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false); // ✅ Renombrado para claridad
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
@@ -18,13 +18,12 @@ export default function Header() {
         setUserName(payload.name || 'Usuario');
         setIsLoggedIn(true);
 
-        // 🔹 Leer el rol del token
         const roles = payload.role || [];
         const isAdminFlag = Array.isArray(roles)
           ? roles.includes('Admin')
           : roles === 'Admin';
 
-        setIsAdmin(isAdminFlag); // ✅ Solo es true si es Admin
+        setIsAdmin(isAdminFlag);
       } catch (e) {
         console.error('Token inválido:', e);
         setIsLoggedIn(false);
@@ -47,11 +46,9 @@ export default function Header() {
     window.location.href = '/';
   };
 
-  // Cerrar menú al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (showUserMenu) {
-        // Verifica si el clic fue fuera del menú
         const target = e.target as Node;
         const menu = document.querySelector('.user-menu');
         if (menu && !menu.contains(target)) {
@@ -86,13 +83,13 @@ export default function Header() {
             <span className="font-['EroSub'] text-sm"></span>
           </Link>
 
-          {/* Tracking - Visible para todos */}
+          {/* Tracking */}
           <Link href="/tracking" className="flex items-center space-x-1 hover:text-gray-300">
             <TruckIcon className="h-6 w-6" />
             <span className="font-['EroSub'] text-2xl">Seguimiento</span>
           </Link>
 
-          {/* ✅ SOLO PARA ADMINS: enlaces de Ventas y Admin */}
+          {/* Enlaces de Admin */}
           {isAdmin && (
             <>
               <Link href="/ventas" className="font-['EroSub'] text-2xl hover:text-gray-300">
@@ -123,14 +120,24 @@ export default function Header() {
                   className="user-menu absolute right-0 mt-2 w-48 bg-white text-black rounded-md shadow-lg z-10"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* 👇 Botón de "Mi Cuenta" */}
+                  {/* ✅ Mantiene "Mi Cuenta" */}
                   <Link
                     href="/mi-cuenta"
                     className="block px-4 py-2 text-sm hover:bg-gray-100"
-                    onClick={() => setShowUserMenu(false)} // Cierra el menú al hacer clic
+                    onClick={() => setShowUserMenu(false)}
                   >
                     Mi Cuenta
                   </Link>
+
+                  {/* ✅ NUEVO: "Mis Compras" */}
+                  <Link
+                    href="/pagos"
+                    className="block px-4 py-2 text-sm hover:bg-gray-100"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    Mis Compras
+                  </Link>
+
                   <button
                     onClick={handleLogout}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
