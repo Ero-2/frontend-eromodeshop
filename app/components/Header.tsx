@@ -87,7 +87,7 @@ export default function Header() {
           {/* Tracking */}
           <Link href="/tracking" className="flex items-center space-x-1 hover:text-gray-300">
             <TruckIcon className="h-6 w-6" />
-            <span className="font-['EroSub'] text-2xl">Seguimiento</span>
+            <span className="font-['EroSub'] text-2xl"></span>
           </Link>
 
           {/* Enlaces de Admin */}
