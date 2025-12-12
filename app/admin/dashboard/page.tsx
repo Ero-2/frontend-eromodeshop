@@ -13,11 +13,9 @@ import {
   FileSpreadsheet,
   FileCode,
   FileJson,
-  Database
+  Database,
+  RefreshCw
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 
 // Interfaces actualizadas para coincidir con la estructura esperada por el frontend
 interface UsuarioProcesado {
@@ -63,6 +61,7 @@ export default function AdminDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
+  const [pdfError, setPdfError] = useState<string>('');
 
   // Cargar datos reales desde el backend
   useEffect(() => {
@@ -73,7 +72,10 @@ export default function AdminDashboard() {
   const cargarConteos = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) return;
+      if (!token) {
+        console.warn('No hay token de autenticación');
+        return;
+      }
 
       const [usuariosRes, productosRes, ventasRes] = await Promise.all([
         fetch('https://localhost:7220/api/Usuarios', {
@@ -81,18 +83,27 @@ export default function AdminDashboard() {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
+        }).catch(err => {
+          console.error('Error en fetch usuarios:', err);
+          return { ok: false, json: () => [] };
         }),
         fetch('https://localhost:7220/api/Productos', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
+        }).catch(err => {
+          console.error('Error en fetch productos:', err);
+          return { ok: false, json: () => [] };
         }),
         fetch('https://localhost:7220/api/Orden/todas', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
+        }).catch(err => {
+          console.error('Error en fetch ventas:', err);
+          return { ok: false, json: () => [] };
         })
       ]);
 
@@ -112,6 +123,7 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     setLoading(true);
+    setPdfError('');
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -143,6 +155,7 @@ export default function AdminDashboard() {
       }
 
       const rawData = await res.json();
+      console.log(`Datos crudos de ${activeTab}:`, rawData);
 
       // Procesar los datos según la pestaña
       let processedData: any[] = [];
@@ -214,6 +227,20 @@ export default function AdminDashboard() {
           
         case 'ventas':
           processedData = rawData.map((o: any) => {
+            let fechaFormateada = 'Fecha desconocida';
+            const fechaRaw = o.FechaOrden || o.fechaOrden;
+            
+            if (fechaRaw) {
+              try {
+                const dateObj = new Date(fechaRaw);
+                if (!isNaN(dateObj.getTime())) {
+                  fechaFormateada = dateObj.toLocaleDateString('es-ES');
+                }
+              } catch (e) {
+                console.error('Error parseando fecha de orden:', e);
+              }
+            }
+
             return {
               id: o.IdOrden || o.idOrden || o.id || 0,
               orden: `ORD-${o.IdOrden || o.idOrden || o.id || 0}`,
@@ -223,15 +250,14 @@ export default function AdminDashboard() {
               total: o.Total !== null && o.Total !== undefined ? 
                     parseFloat(o.Total).toFixed(2) : 
                     (o.total ? parseFloat(o.total).toFixed(2) : '0.00'),
-              fecha: o.FechaOrden ? 
-                    new Date(o.FechaOrden).toLocaleDateString('es-ES') : 
-                    (o.fechaOrden ? new Date(o.fechaOrden).toLocaleDateString('es-ES') : 'Fecha desconocida'),
+              fecha: fechaFormateada,
               estado: o.status || o.Status || o.estado || 'Desconocido'
             };
           });
           break;
       }
 
+      console.log(`Datos procesados de ${activeTab}:`, processedData);
       setData(processedData);
       setTotalItems(processedData.length);
       
@@ -250,11 +276,21 @@ export default function AdminDashboard() {
       return;
     }
     
-    const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(item => Object.values(item).map(v => `"${v}"`).join(',')).join('\n');
-    const csv = `${headers}\n${rows}`;
-    
-    downloadFile(csv, `${activeTab}_export_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv');
+    try {
+      const headers = Object.keys(data[0]).join(',');
+      const rows = data.map(item => 
+        Object.values(item).map(v => 
+          typeof v === 'string' ? `"${v.replace(/"/g, '""')}"` : v
+        ).join(',')
+      ).join('\n');
+      const csv = `${headers}\n${rows}`;
+      
+      downloadFile(csv, `${activeTab}_export_${new Date().toISOString().slice(0,10)}.csv`, 'text/csv;charset=utf-8;');
+      alert('CSV exportado exitosamente');
+    } catch (error) {
+      console.error('Error exportando CSV:', error);
+      alert('Error al generar el archivo CSV');
+    }
   };
 
   const exportToJSON = () => {
@@ -263,18 +299,24 @@ export default function AdminDashboard() {
       return;
     }
     
-    const jsonData = {
-      metadata: {
-        exportDate: new Date().toISOString(),
-        tipo: activeTab,
-        totalRegistros: data.length,
-        sistema: 'EromodeShop Admin'
-      },
-      data: data
-    };
-    
-    const jsonString = JSON.stringify(jsonData, null, 2);
-    downloadFile(jsonString, `${activeTab}_export_${new Date().toISOString().slice(0,10)}.json`, 'application/json');
+    try {
+      const jsonData = {
+        metadata: {
+          exportDate: new Date().toISOString(),
+          tipo: activeTab,
+          totalRegistros: data.length,
+          sistema: 'EromodeShop Admin'
+        },
+        data: data
+      };
+      
+      const jsonString = JSON.stringify(jsonData, null, 2);
+      downloadFile(jsonString, `${activeTab}_export_${new Date().toISOString().slice(0,10)}.json`, 'application/json');
+      alert('JSON exportado exitosamente');
+    } catch (error) {
+      console.error('Error exportando JSON:', error);
+      alert('Error al generar el archivo JSON');
+    }
   };
 
   const exportToXML = () => {
@@ -283,37 +325,54 @@ export default function AdminDashboard() {
       return;
     }
     
-    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-    xml += `<${activeTab}>\n`;
-    xml += '  <metadata>\n';
-    xml += `    <exportDate>${new Date().toISOString()}</exportDate>\n`;
-    xml += `    <tipo>${activeTab}</tipo>\n`;
-    xml += `    <totalRegistros>${data.length}</totalRegistros>\n`;
-    xml += '    <sistema>EromodeShop Admin</sistema>\n';
-    xml += '  </metadata>\n';
-    xml += '  <registros>\n';
-    
-    data.forEach(item => {
-      xml += '    <registro>\n';
-      Object.entries(item).forEach(([key, value]) => {
-        xml += `      <${key}>${value}</${key}>\n`;
+    try {
+      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+      xml += `<${activeTab}>\n`;
+      xml += '  <metadata>\n';
+      xml += `    <exportDate>${new Date().toISOString()}</exportDate>\n`;
+      xml += `    <tipo>${activeTab}</tipo>\n`;
+      xml += `    <totalRegistros>${data.length}</totalRegistros>\n`;
+      xml += '    <sistema>EromodeShop Admin</sistema>\n';
+      xml += '  </metadata>\n';
+      xml += '  <registros>\n';
+      
+      data.forEach(item => {
+        xml += '    <registro>\n';
+        Object.entries(item).forEach(([key, value]) => {
+          const escapedValue = String(value).replace(/&/g, '&amp;')
+                                           .replace(/</g, '&lt;')
+                                           .replace(/>/g, '&gt;')
+                                           .replace(/"/g, '&quot;')
+                                           .replace(/'/g, '&apos;');
+          xml += `      <${key}>${escapedValue}</${key}>\n`;
+        });
+        xml += '    </registro>\n';
       });
-      xml += '    </registro>\n';
-    });
-    
-    xml += '  </registros>\n';
-    xml += `</${activeTab}>`;
-    
-    downloadFile(xml, `${activeTab}_export_${new Date().toISOString().slice(0,10)}.xml`, 'text/xml');
+      
+      xml += '  </registros>\n';
+      xml += `</${activeTab}>`;
+      
+      downloadFile(xml, `${activeTab}_export_${new Date().toISOString().slice(0,10)}.xml`, 'text/xml');
+      alert('XML exportado exitosamente');
+    } catch (error) {
+      console.error('Error exportando XML:', error);
+      alert('Error al generar el archivo XML');
+    }
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     if (!data || data.length === 0) {
       alert('No hay datos para exportar');
       return;
     }
     
     try {
+      setPdfError('');
+      
+      // Cargar dinámicamente las librerías para evitar problemas de SSR
+      const { jsPDF } = await import('jspdf');
+      const autoTable = await import('jspdf-autotable');
+      
       const doc = new jsPDF();
       
       // Título
@@ -334,46 +393,60 @@ export default function AdminDashboard() {
       // Datos de la tabla
       const tableData = data.map(item => Object.values(item));
       
-      // Crear tabla
-      (doc as any).autoTable({
+      // Crear tabla usando autoTable
+      autoTable.default(doc, {
         startY: 35,
         head: [headers],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-        styles: { fontSize: 9 },
+        headStyles: { 
+          fillColor: [41, 128, 185], 
+          textColor: 255,
+          fontStyle: 'bold'
+        },
+        styles: { 
+          fontSize: 9,
+          cellPadding: 3
+        },
         margin: { top: 35 }
       });
       
       // Pie de página
-      const pageCount = (doc as any).internal.getNumberOfPages();
+      const pageCount = doc.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.text(
           `Página ${i} de ${pageCount} • EromodeShop Admin • Generado el: ${fecha}`,
-          doc.internal.pageSize.width / 2,
-          doc.internal.pageSize.height - 10,
+          doc.internal.pageSize.getWidth() / 2,
+          doc.internal.pageSize.getHeight() - 10,
           { align: 'center' }
         );
       }
       
       // Guardar PDF
-      doc.save(`${activeTab}_reporte_${new Date().toISOString().slice(0,10)}.pdf`);
+      const fileName = `${activeTab}_reporte_${new Date().toISOString().slice(0,10)}.pdf`;
+      doc.save(fileName);
       
-    } catch (error) {
+      alert(`PDF exportado exitosamente: ${fileName}`);
+      
+    } catch (error: any) {
       console.error('Error generando PDF:', error);
-      alert('Error al generar el PDF. Asegúrate de tener jsPDF instalado.');
+      setPdfError(error.message);
+      alert(`Error al generar el PDF: ${error.message}. Asegúrate de tener jsPDF instalado.`);
     }
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (!data || data.length === 0) {
       alert('No hay datos para exportar');
       return;
     }
     
     try {
+      // Importar dinámicamente
+      const XLSX = await import('xlsx');
+      
       const worksheet = XLSX.utils.json_to_sheet(data);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, activeTab);
@@ -390,7 +463,10 @@ export default function AdminDashboard() {
       const metadataSheet = XLSX.utils.aoa_to_sheet(metadata);
       XLSX.utils.book_append_sheet(workbook, metadataSheet, 'Metadata');
       
-      XLSX.writeFile(workbook, `${activeTab}_export_${new Date().toISOString().slice(0,10)}.xlsx`);
+      const fileName = `${activeTab}_export_${new Date().toISOString().slice(0,10)}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      
+      alert(`Excel exportado exitosamente: ${fileName}`);
     } catch (error) {
       console.error('Error generando Excel:', error);
       alert('Error al generar el archivo Excel.');
@@ -398,39 +474,45 @@ export default function AdminDashboard() {
   };
 
   const downloadFile = (content: string, fileName: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error descargando archivo:', error);
+      alert('Error al descargar el archivo');
+    }
   };
 
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const paginatedData = data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header con conteos */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Panel Administrativo</h1>
+        <div className="bg-white rounded-lg shadow-md p-4 md:p-6 mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Panel Administrativo</h1>
           <p className="text-gray-600 mb-6">Gestión de usuarios, productos y ventas</p>
           
           {/* Cards de conteo */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="bg-gradient-to- from-blue-500 to-blue-600 rounded-lg p-5 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 md:p-5 text-white shadow-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold">Usuarios Registrados</h3>
-                  <p className="text-3xl font-bold mt-2">{conteo.usuarios}</p>
+                  <h3 className="text-base md:text-lg font-semibold">Usuarios Registrados</h3>
+                  <p className="text-2xl md:text-3xl font-bold mt-2">{conteo.usuarios}</p>
                 </div>
-                <Users size={40} className="opacity-80" />
+                <Users size={36} className="opacity-80" />
               </div>
-              <div className="mt-4 text-sm opacity-90">
+              <div className="mt-3 text-sm opacity-90">
                 <span className="flex items-center gap-1">
                   <Database size={14} />
                   Base de datos actualizada
@@ -438,15 +520,15 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            <div className="bg-gradient-to- from-green-500 to-green-600 rounded-lg p-5 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 md:p-5 text-white shadow-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold">Productos Activos</h3>
-                  <p className="text-3xl font-bold mt-2">{conteo.productos}</p>
+                  <h3 className="text-base md:text-lg font-semibold">Productos Activos</h3>
+                  <p className="text-2xl md:text-3xl font-bold mt-2">{conteo.productos}</p>
                 </div>
-                <Package size={40} className="opacity-80" />
+                <Package size={36} className="opacity-80" />
               </div>
-              <div className="mt-4 text-sm opacity-90">
+              <div className="mt-3 text-sm opacity-90">
                 <span className="flex items-center gap-1">
                   <Database size={14} />
                   En inventario del sistema
@@ -454,15 +536,15 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            <div className="bg-gradient-to- from-purple-500 to-purple-600 rounded-lg p-5 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 md:p-5 text-white shadow-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold">Ventas Totales</h3>
-                  <p className="text-3xl font-bold mt-2">{conteo.ventas}</p>
+                  <h3 className="text-base md:text-lg font-semibold">Ventas Totales</h3>
+                  <p className="text-2xl md:text-3xl font-bold mt-2">{conteo.ventas}</p>
                 </div>
-                <ShoppingCart size={40} className="opacity-80" />
+                <ShoppingCart size={36} className="opacity-80" />
               </div>
-              <div className="mt-4 text-sm opacity-90">
+              <div className="mt-3 text-sm opacity-90">
                 <span className="flex items-center gap-1">
                   <Database size={14} />
                   Órdenes procesadas
@@ -498,239 +580,285 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs y Exportaciones */}
         <div className="bg-white rounded-lg shadow-md mb-6">
-          <div className="flex border-b">
+          <div className="flex border-b overflow-x-auto">
             <button
               onClick={() => { setActiveTab('usuarios'); setCurrentPage(1); }}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 md:px-6 py-3 md:py-4 font-medium transition-colors whitespace-nowrap ${
                 activeTab === 'usuarios' 
                   ? 'border-b-2 border-black text-black' 
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Users size={20} />
+              <Users size={18} />
               Usuarios
             </button>
             <button
               onClick={() => { setActiveTab('productos'); setCurrentPage(1); }}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 md:px-6 py-3 md:py-4 font-medium transition-colors whitespace-nowrap ${
                 activeTab === 'productos' 
                   ? 'border-b-2 border-black text-black' 
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Package size={20} />
+              <Package size={18} />
               Productos
             </button>
             <button
               onClick={() => { setActiveTab('ventas'); setCurrentPage(1); }}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 md:px-6 py-3 md:py-4 font-medium transition-colors whitespace-nowrap ${
                 activeTab === 'ventas' 
                   ? 'border-b-2 border-black text-black' 
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <ShoppingCart size={20} />
+              <ShoppingCart size={18} />
               Ventas Histórico
             </button>
           </div>
 
-          {/* Export Buttons */}
-          <div className="p-4 bg-gray-50 border-b flex gap-2 flex-wrap">
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={exportToCSV}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-                title="Exportar como CSV"
-              >
-                <FileText size={18} />
-                CSV
-              </button>
-              <button
-                onClick={exportToJSON}
-                className="flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors shadow-sm"
-                title="Exportar como JSON"
-              >
-                <FileJson size={18} />
-                JSON
-              </button>
-              <button
-                onClick={exportToXML}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                title="Exportar como XML"
-              >
-                <FileCode size={18} />
-                XML
-              </button>
-              <button
-                onClick={exportToPDF}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm"
-                title="Exportar como PDF"
-              >
-                <Download size={18} />
-                PDF
-              </button>
-              <button
-                onClick={exportToExcel}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
-                title="Exportar como Excel"
-              >
-                <FileSpreadsheet size={18} />
-                Excel
-              </button>
-            </div>
-            
-            <div className="flex items-center gap-3 ml-auto">
-              <button
-                onClick={loadData}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-sm"
-                title="Recargar datos"
-              >
-                <Download size={18} />
-                Recargar
-              </button>
-              <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded border">
-                <span className="font-medium">{data.length}</span> registros
+          {/* Botones de Exportación */}
+          <div className="p-4 bg-gray-50 border-b">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={exportToCSV}
+                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm text-sm md:text-base"
+                  title="Exportar como CSV"
+                >
+                  <FileText size={16} />
+                  CSV
+                </button>
+                <button
+                  onClick={exportToJSON}
+                  className="flex items-center gap-2 px-3 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors shadow-sm text-sm md:text-base"
+                  title="Exportar como JSON"
+                >
+                  <FileJson size={16} />
+                  JSON
+                </button>
+                <button
+                  onClick={exportToXML}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm md:text-base"
+                  title="Exportar como XML"
+                >
+                  <FileCode size={16} />
+                  XML
+                </button>
+                <button
+                  onClick={exportToPDF}
+                  className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm text-sm md:text-base"
+                  title="Exportar como PDF"
+                >
+                  <Download size={16} />
+                  PDF
+                </button>
+                <button
+                  onClick={exportToExcel}
+                  className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-sm text-sm md:text-base"
+                  title="Exportar como Excel"
+                >
+                  <FileSpreadsheet size={16} />
+                  Excel
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={loadData}
+                  className="flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-sm text-sm md:text-base"
+                  title="Recargar datos"
+                >
+                  <RefreshCw size={16} />
+                  Recargar
+                </button>
+                <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded border">
+                  <span className="font-medium">{data.length}</span> registros
+                </div>
               </div>
             </div>
+
+            {pdfError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 text-sm">
+                  <strong>Error PDF:</strong> {pdfError}
+                </p>
+                <p className="text-red-500 text-xs mt-1">
+                  Verifica que las dependencias estén instaladas: npm install jspdf jspdf-autotable
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Table */}
+          {/* Tabla de Datos */}
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-                <span className="ml-3 text-gray-600">Cargando datos...</span>
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mb-4"></div>
+                <span className="text-gray-600">Cargando datos...</span>
+                <span className="text-gray-500 text-sm mt-2">Obteniendo información de {activeTab}</span>
               </div>
             ) : data.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <Package size={48} className="text-gray-400 mb-4" />
                 <p className="text-gray-600">No hay datos disponibles para {activeTab}</p>
-                <p className="text-gray-500 text-sm mt-2">
+                <p className="text-gray-500 text-sm mt-2 text-center px-4">
                   Verifica la conexión con el backend o que existan registros
                 </p>
+                <button
+                  onClick={loadData}
+                  className="mt-4 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  Intentar de nuevo
+                </button>
               </div>
             ) : (
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    {data[0] && Object.keys(data[0]).map(key => (
-                      <th key={key} className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                        {key.charAt(0).toUpperCase() + key.slice(1)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedData.map((item: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      {Object.values(item).map((value: any, i: number) => {
-                        // Aplicar estilos especiales según el tipo de dato
-                        const isPrecio = Object.keys(item)[i] === 'precio' || Object.keys(item)[i] === 'total';
-                        const isStock = Object.keys(item)[i] === 'stock';
-                        const isEstado = Object.keys(item)[i] === 'estado';
-                        
-                        let className = "px-6 py-4 whitespace-nowrap text-sm";
-                        
-                        if (isPrecio) {
-                          className += " text-blue-600 font-medium";
-                        } else if (isStock) {
-                          className += value > 0 ? " text-green-600" : " text-red-600";
-                        } else if (isEstado) {
-                          const estadoClasses: {[key: string]: string} = {
-                            'pendiente': 'bg-yellow-100 text-yellow-800',
-                            'completado': 'bg-green-100 text-green-800',
-                            'procesado': 'bg-blue-100 text-blue-800',
-                            'cancelado': 'bg-red-100 text-red-800',
-                            'entregado': 'bg-emerald-100 text-emerald-800'
-                          };
-                          const estadoClass = estadoClasses[value?.toLowerCase()] || 'bg-gray-100 text-gray-800';
-                          className += ` px-3 py-1 rounded-full text-xs font-medium ${estadoClass}`;
-                        } else {
-                          className += " text-gray-900";
-                        }
-                        
-                        return (
-                          <td key={i} className={className}>
-                            {isPrecio ? `$${value}` : value}
-                          </td>
-                        );
-                      })}
+              <>
+                <table className="w-full">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      {data[0] && Object.keys(data[0]).map(key => (
+                        <th 
+                          key={key} 
+                          className="px-4 md:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
+                        >
+                          {key.charAt(0).toUpperCase() + key.slice(1)}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedData.map((item: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                        {Object.entries(item).map(([key, value]: [string, any], i: number) => {
+                          // Aplicar estilos especiales según el tipo de dato
+                          const isPrecio = key === 'precio' || key === 'total';
+                          const isStock = key === 'stock';
+                          const isEstado = key === 'estado';
+                          
+                          let className = "px-4 md:px-6 py-3 whitespace-nowrap text-sm";
+                          
+                          if (isPrecio) {
+                            className += " text-blue-600 font-medium";
+                          } else if (isStock) {
+                            className += value > 0 ? " text-green-600" : " text-red-600";
+                          } else if (isEstado) {
+                            const estadoClasses: {[key: string]: string} = {
+                              'pendiente': 'bg-yellow-100 text-yellow-800',
+                              'completado': 'bg-green-100 text-green-800',
+                              'procesado': 'bg-blue-100 text-blue-800',
+                              'cancelado': 'bg-red-100 text-red-800',
+                              'entregado': 'bg-emerald-100 text-emerald-800'
+                            };
+                            const estadoClass = estadoClasses[value?.toLowerCase()] || 'bg-gray-100 text-gray-800';
+                            className += ` px-3 py-1 rounded-full text-xs font-medium ${estadoClass}`;
+                          } else {
+                            className += " text-gray-900";
+                          }
+                          
+                          return (
+                            <td key={i} className={className}>
+                              {isPrecio ? `$${value}` : value}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between px-6 py-4 bg-gray-50">
-            <div className="text-sm text-gray-700">
-              Mostrando <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a{' '}
-              <span className="font-medium">{Math.min(currentPage * itemsPerPage, totalItems)}</span> de{' '}
-              <span className="font-medium">{totalItems}</span> resultados
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum: number;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`px-4 py-2 rounded-lg border transition-colors ${
-                        currentPage === pageNum
-                          ? 'bg-black text-white border-black'
-                          : 'border-gray-300 hover:bg-gray-100'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
+                {/* Paginación */}
+                {totalPages > 1 && (
+                  <div className="flex flex-col md:flex-row items-center justify-between px-4 md:px-6 py-4 bg-gray-50 border-t">
+                    <div className="text-sm text-gray-700 mb-2 md:mb-0">
+                      Mostrando <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> a{' '}
+                      <span className="font-medium">{Math.min(currentPage * itemsPerPage, totalItems)}</span> de{' '}
+                      <span className="font-medium">{totalItems}</span> resultados
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Página anterior"
+                      >
+                        <ChevronLeft size={20} />
+                      </button>
+                      
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum: number;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`px-3 py-1 md:px-4 md:py-2 rounded-lg border transition-colors text-sm ${
+                                currentPage === pageNum
+                                  ? 'bg-black text-white border-black'
+                                  : 'border-gray-300 hover:bg-gray-100'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-lg border border-gray-300 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        aria-label="Página siguiente"
+                      >
+                        <ChevronRight size={20} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
         {/* Link to Charts */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-lg shadow-md p-4 md:p-6">
           <a
             href="/ventas"
-            style={{ textDecoration: 'none' }}
-            className="flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to- from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg"
+            className="flex items-center justify-center gap-3 px-4 md:px-6 py-3 md:py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg no-underline"
           >
-            <BarChart3 size={24} />
-            <span className="text-lg font-semibold">Ver Gráficas y Análisis de Ventas</span>
+            <BarChart3 size={20} />
+            <span className="text-base md:text-lg font-semibold">Ver Gráficas y Análisis de Ventas</span>
           </a>
-          <div className="mt-4 text-center text-sm text-gray-600">
+          <div className="mt-3 text-center text-sm text-gray-600">
             <p>Exporta tus datos en 5 formatos diferentes: CSV, JSON, XML, PDF y Excel</p>
+            <p className="text-xs text-gray-500 mt-1">PDF requiere jspdf y jspdf-autotable instalados</p>
           </div>
         </div>
+
+        {/* Debug Info (solo en desarrollo) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-6 p-4 bg-gray-100 rounded-lg">
+            <details>
+              <summary className="cursor-pointer font-medium text-gray-700">Información de Debug</summary>
+              <div className="mt-2 text-sm">
+                <p><strong>Tabla activa:</strong> {activeTab}</p>
+                <p><strong>Total de registros:</strong> {data.length}</p>
+                <p><strong>Página actual:</strong> {currentPage} de {totalPages}</p>
+                <p><strong>Error PDF:</strong> {pdfError || 'Ninguno'}</p>
+              </div>
+            </details>
+          </div>
+        )}
       </div>
     </div>
   );
