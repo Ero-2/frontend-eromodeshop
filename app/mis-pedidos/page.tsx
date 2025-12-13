@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Package, FileText, Receipt, Download } from 'lucide-react';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface OrdenResumen {
   idOrden: number;
@@ -382,7 +382,7 @@ export default function MisPedidosPage() {
       `$${detalle.subtotal.toFixed(2)}`
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc as any, {
       startY: yPos,
       head: [['#', 'Producto', 'Talla', 'Cant', 'P. Unit.', 'Subtotal']],
       body: tableData,
@@ -458,7 +458,7 @@ export default function MisPedidosPage() {
       ['1', 'Producto de ejemplo', '2', `$${factura.totalBruto.toFixed(2)}`, `$${factura.totalBruto.toFixed(2)}`]
     ];
     
-    (doc as any).autoTable({
+    autoTable(doc as any, {
       startY: yPos,
       head: [['#', 'Descripción', 'Cantidad', 'P. Unit.', 'Subtotal']],
       body: tableData,
